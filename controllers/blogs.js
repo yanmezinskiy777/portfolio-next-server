@@ -1,3 +1,5 @@
+const slugify = require('slugify');
+const uniqueSlug = require('unique-slug');
 const Blogs = require("../db/models/blogs");
 
 exports.getBlogsController = async (req, res) => {
@@ -29,18 +31,42 @@ exports.createBlog = async (req, res) => {
    return res.json(blog);
 }
 
+const _saveBlog = async blog => {
+   try {
+     const createdBlog = await blog.save();
+     return createdBlog;
+   } catch(e) {
+     if (e.code === 11000 && e.keyPattern && e.keyPattern.slug) {
+       blog.slug += `-${uniqueSlug()}`;
+       return _saveBlog(blog);
+     }
+ 
+     throw(e);
+   }
+ }
+
 exports.updateBlog = async (req, res) => {
   try{
          Blogs.findById(req.params.id, async (err, blog) => {
+
          if(err){
             return res.status(err.status || 400).json(err.message);
          }
+           
+         if (req.body.status && req.body.status === 'published' && !blog.slug){
+            blog.slug = slugify(blog.title, {
+               replacement: '-',
+               lower: true   
+             })
+         }
+
          blog.set(req.body);
          blog.updatedAt = Date.now();
-         await blog.save();
-         return res.json(blog);
+         const updatedBlog = await _saveBlog(blog);
+         return res.json(updatedBlog);
       });
   }catch(e){
+
    return res.status(e.status || 400).json(e.message);
   }
 }
